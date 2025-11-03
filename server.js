@@ -31,6 +31,19 @@ app.post("/create-payment-intent", async (req, res) => {
       });
     }
 
+    // Check if we're in live mode and if a test card is being used
+    const isLiveMode = process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY.startsWith('sk_live_');
+    const isTestCard = req.body.payment_method_data && 
+                      req.body.payment_method_data.card && 
+                      req.body.payment_method_data.card.number && 
+                      req.body.payment_method_data.card.number.toString().startsWith('4242');
+
+    if (isLiveMode && isTestCard) {
+      return res.status(400).json({
+        error: "Test cards cannot be used in live mode. Please use a real card."
+      });
+    }
+
     // Create a PaymentIntent with the order amount and currency
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(amount), // Amount in pence
@@ -41,6 +54,12 @@ app.post("/create-payment-intent", async (req, res) => {
       metadata: {
         ...metadata,
         timestamp: new Date().toISOString(),
+        mode: isLiveMode ? "live" : "test", // Track mode in metadata
+      },
+      payment_method_options: {
+        card: {
+          request_three_d_secure: "automatic",
+        },
       },
     });
 
